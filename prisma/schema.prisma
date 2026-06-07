@@ -1,0 +1,96 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum PaymentStatus {
+  PAID
+  PENDING
+  PARTIAL
+}
+
+enum RoomType {
+  DORMITORY
+  PRIVATE
+  DELUXE
+  SUITE
+}
+
+model User {
+  id        String   @id  // Auth users ID (UUID format)
+  email     String   @unique
+  name      String?
+  avatarUrl String?
+  role      String   @default("USER")  // "USER" or "ADMIN"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  guestRecords GuestRecord[]
+}
+model GuestRecord {
+  id            String        @id @default(cuid())
+  name          String
+  phone         String
+  email         String?
+  idCardUrl     String?
+  roomNo        String
+  roomType      RoomType      @default(PRIVATE)
+  checkIn       DateTime
+  checkOut      DateTime?
+  amountPaid    Float         @default(0)
+  totalAmount   Float         @default(0)
+  paymentStatus PaymentStatus @default(PENDING)
+  status        String        @default("ACTIVE")
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  createdBy     String
+}
+
+model MenuItem {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  price       Float
+  category    String
+  imageUrl    String?
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model HostelRoom {
+  id            String   @id @default(cuid())
+  roomType      RoomType
+  roomNumber    String   @unique
+  pricePerNight Float
+  capacity      Int      @default(1)
+  description   String?
+  amenities     String[]
+  images        String[]
+  isAvailable   Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Revenue {
+  id          String   @id @default(cuid())
+  amount      Float
+  description String
+  category    String
+  date        DateTime @default(now())
+  guestId     String?
+  createdAt   DateTime @default(now())
+}
