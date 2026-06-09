@@ -4,9 +4,9 @@ import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 
 import { getMenuItems } from "@/app/actions/menu"
-import { Clock, ChefHat, Flame, Leaf, Coffee, Utensils } from "lucide-react"
+import { Clock, ChefHat, Flame, Leaf, Coffee, Utensils, MessageCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { WhatsAppButton } from "./WhatsAppButton"
+import { generateWhatsAppLink, WHATSAPP_NUMBER } from "@/lib/utils"
 
 const categories = [
   { id: "all", label: "All Items", icon: Utensils },
@@ -110,6 +110,18 @@ export function MenuSection() {
     ? menuItems
     : menuItems.filter(item => item.category === activeCategory)
 
+  const handleOrderInquiry = (itemTitle: string) => {
+    const message = `Hello! I'd like to order *${itemTitle}* from Gani Restaurant.\n\nPlease confirm availability and pricing.\nThank you!`
+    const link = generateWhatsAppLink(WHATSAPP_NUMBER, message)
+    window.open(link, '_blank', 'noopener,noreferrer')
+  }
+
+  const handleFullMenuInquiry = () => {
+    const message = `Hello! I'd like to see the complete menu with pricing for Gani Restaurant.\n\nPlease share the full menu or any current offers.\nThank you!`
+    const link = generateWhatsAppLink(WHATSAPP_NUMBER, message)
+    window.open(link, '_blank', 'noopener,noreferrer')
+  }
+
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -187,15 +199,10 @@ export function MenuSection() {
                 )}
 
                 <div className="p-5">
-                  <div className="mb-2 flex items-start justify-between">
+                  <div className="mb-2">
                     <h3 className="text-lg font-semibold text-white">
                       {item.title}
                     </h3>
-                    <div className="rounded-full bg-orange-500/10 px-3 py-1">
-                      <span className="font-bold text-orange-500">
-                        ₹{item.price}
-                      </span>
-                    </div>
                   </div>
                   
                   <p className="mb-4 text-sm text-gray-400">
@@ -207,11 +214,15 @@ export function MenuSection() {
                       <Clock className="h-3 w-3" />
                       <span>15-20 min</span>
                     </div>
-                    <WhatsAppButton
-                      roomType={`${item.title} - Order Food`}
+                    <Button
                       variant="outline"
                       size="sm"
-                    />
+                      onClick={() => handleOrderInquiry(item.title)}
+                      className="border-green-600/30 text-green-400 hover:bg-green-600/10 hover:border-green-500/50 hover:text-green-300 transition-all"
+                    >
+                      <MessageCircle className="mr-1.5 h-3.5 w-3.5" />
+                      Order Now
+                    </Button>
                   </div>
                 </div>
 
@@ -228,11 +239,14 @@ export function MenuSection() {
         <p className="mb-4 text-gray-400">
           Want to see our complete menu or place a bulk order?
         </p>
-        <WhatsAppButton
-          roomType="Complete Menu & Catering"
-          variant="default"
+        <Button
+          onClick={handleFullMenuInquiry}
           size="lg"
-        />
+          className="bg-green-600 hover:bg-green-700 text-white font-semibold shadow-lg hover:shadow-green-600/20 transition-all duration-300"
+        >
+          <MessageCircle className="mr-2 h-4 w-4" />
+          Get Full Menu via WhatsApp
+        </Button>
       </div>
     </div>
   )

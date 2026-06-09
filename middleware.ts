@@ -1,92 +1,108 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { jwtVerify } from 'jose'
+
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET || 'jjsasadasdasda'
+)
 
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  })
+  const { pathname } = request.nextUrl
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value,
-            ...options,
-          })
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          })
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-          })
-        },
-        remove(name: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value: '',
-            ...options,
-          })
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          })
-          response.cookies.set({
-            name,
-            value: '',
-            ...options,
-          })
-        },
-      },
-    }
+  // Allow public routes
+  const publicRoutes = [
+    '/',
+    '/auth/signin',
+    '/auth/callback',
+    '/api/auth/callback',
+    '/api/check-db',
+    '/api/ping',
+    '/_next',
+    '/favicon.ico',
+    '/images',
+    '/uploads',
+    '/unauthorized',
+  ]
+
+  // Check if current path is public
+  const isPublicRoute = publicRoutes.some(
+    (route) => pathname === route || pathname.startsWith(route + '/')
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
+  if (isPublicRoute) {
+    return NextResponse.next()
+  }
 
-  // Protect admin routes
-  if (request.nextUrl.pathname.startsWith('/admin')) {
-    if (!user) {
-      const redirectUrl = new URL('/auth/signin', request.url)
-      redirectUrl.searchParams.set('redirect', request.nextUrl.pathname)
-      return NextResponse.redirect(redirectUrl)
+  // Get token from cookies
+  const token = request.cookies.get('token')?.value
+
+  // ─── PROTECT ADMIN ROUTES ───────────────────────────
+  if (pathname.startsWith('/admin')) {
+    if (!token) {
+      // No token → redirect to sign in
+      const signInUrl = new URL('/auth/signin', request.url)
+      signInUrl.searchParams.set('redirect', pathname)
+      signInUrl.searchParams.set('message', 'signin_required')
+      return NextResponse.redirect(signInUrl)
     }
 
-    const { data: userData } = await supabase
-      .from('User')
-      .select('role')
-      .eq('email', user.email)
-      .single()
+    try {
+      const { payload } = await jwtVerify(token, JWT_SECRET)
 
-    if (userData?.role !== 'ADMIN') {
-      return NextResponse.redirect(new URL('/', request.url))
+      // Check if user has ADMIN role
+      if (payload.role !== 'ADMIN') {
+        // Not admin → redirect to unauthorized page
+        return NextResponse.redirect(new URL('/unauthorized', request.url))
+      }
+
+      // Admin verified → allow access
+      return NextResponse.next()
+    } catch (error) {
+      // Invalid token → redirect to sign in
+      console.error('JWT verification failed:', error)
+      const signInUrl = new URL('/auth/signin', request.url)
+      signInUrl.searchParams.set('message', 'session_expired')
+      return NextResponse.redirect(signInUrl)
     }
   }
 
-  // Protect user dashboard routes
-  if (request.nextUrl.pathname.startsWith('/dashboard')) {
-    if (!user) {
-      const redirectUrl = new URL('/auth/signin', request.url)
-      redirectUrl.searchParams.set('redirect', request.nextUrl.pathname)
-      return NextResponse.redirect(redirectUrl)
+  // ─── DASHBOARD ROUTE (redirect to home) ─────────────
+  if (pathname.startsWith('/dashboard')) {
+    return NextResponse.redirect(new URL('/', request.url))
+  }
+
+  // ─── PROTECTED API ROUTES ───────────────────────────
+  if (pathname.startsWith('/api/') && !pathname.startsWith('/api/auth/') && !pathname.startsWith('/api/public/')) {
+    if (!token) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    try {
+      await jwtVerify(token, JWT_SECRET)
+      return NextResponse.next()
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid token' },
+        { status: 401 }
+      )
     }
   }
 
-  return response
+  // Default: allow request
+  return NextResponse.next()
 }
 
+// Configure which routes middleware runs on
 export const config = {
-  matcher: ['/admin/:path*', '/dashboard/:path*'],
+  matcher: [
+    /*
+     * Match all paths except:
+     * - _next/static (static files)
+     * - _next/image (image optimization)
+     * - favicon.ico (favicon)
+     */
+    '/((?!_next/static|_next/image|favicon.ico).*)',
+  ],
 }

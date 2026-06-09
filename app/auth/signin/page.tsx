@@ -1,30 +1,156 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
-import { signInWithGoogle } from "@/app/actions/auth"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Hotel, Utensils, LogIn } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Hotel, Loader2, AlertCircle } from "lucide-react"
 import Link from "next/link"
+import { useAuth } from "@/app/context/AuthContext"
+
+declare global {
+  interface Window {
+    google?: any
+  }
+}
 
 export default function SignInPage() {
   const [loading, setLoading] = useState(false)
+  const [emailLoading, setEmailLoading] = useState(false)
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [googleLoaded, setGoogleLoaded] = useState(false)
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { signIn, loginWithEmail, user, loading: authLoading } = useAuth()
 
-  const handleGoogleSignIn = async () => {
+  const redirectUrl = searchParams.get('redirect') || '/'
+  const messageParam = searchParams.get('message')
+  
+  let infoMessage = ""
+  if (messageParam === "signin_required") {
+    infoMessage = "Please sign in to access the requested page."
+  } else if (messageParam === "session_expired") {
+    infoMessage = "Your session has expired. Please sign in again."
+  }
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.replace(redirectUrl)
+    }
+  }, [user, authLoading, redirectUrl, router])
+
+  // Load Google Identity Services
+  useEffect(() => {
+    if (window.google) {
+      setGoogleLoaded(true)
+      initializeGoogleSignIn()
+      return
+    }
+
+    const script = document.createElement('script')
+    script.src = 'https://accounts.google.com/gsi/client'
+    script.async = true
+    script.defer = true
+    script.onload = () => {
+      setGoogleLoaded(true)
+      initializeGoogleSignIn()
+    }
+    document.body.appendChild(script)
+
+    return () => {
+      const existingScript = document.querySelector(
+        'script[src="https://accounts.google.com/gsi/client"]'
+      )
+      if (existingScript) {
+        document.body.removeChild(existingScript)
+      }
+    }
+  }, [])
+
+  const initializeGoogleSignIn = () => {
+    if (!window.google || !document.getElementById('googleSignInButton')) return
+
+    window.google.accounts.id.initialize({
+      client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
+      callback: handleGoogleResponse,
+      auto_select: false,
+      cancel_on_tap_outside: true,
+    })
+
+    window.google.accounts.id.renderButton(
+      document.getElementById('googleSignInButton'),
+      {
+        type: 'standard',
+        theme: 'filled_black',
+        size: 'large',
+        text: 'continue_with',
+        shape: 'pill',
+        width: 380,
+      }
+    )
+  }
+
+  const handleGoogleResponse = async (response: any) => {
     setLoading(true)
+    setError(null)
+
     try {
-      await signInWithGoogle()
-    } catch (error) {
-      console.error("Sign in failed:", error)
+      const result = await signIn(response.credential)
+
+      if (result.success) {
+        router.replace(redirectUrl)
+      } else {
+        setError(result.error || 'Sign in failed')
+      }
+    } catch (err) {
+      setError('An unexpected error occurred')
     } finally {
       setLoading(false)
     }
   }
 
+  const handleEmailSignIn = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setEmailLoading(true)
+    setError(null)
+
+    try {
+      const result = await loginWithEmail(email, password)
+      if (result.success) {
+        router.replace(redirectUrl)
+      } else {
+        setError(result.error || 'Invalid email or password')
+      }
+    } catch (err) {
+      setError('A connection error occurred. Please try again.')
+    } finally {
+      setEmailLoading(false)
+    }
+  }
+
+  // Show loader while checking auth
+  if (authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-950">
+        <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
+      </div>
+    )
+  }
+
+  // Don't render sign-in if already logged in
+  if (user) {
+    return null
+  }
+
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-gray-950 px-4">
-      {/* Background Pattern */}
+    <div className="relative flex min-h-screen items-center justify-center bg-gray-950 px-4 py-12">
+      {/* Background Effects */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -left-4 -top-24 h-96 w-96 rounded-full bg-orange-500/10 blur-3xl" />
         <div className="absolute -bottom-24 -right-4 h-96 w-96 rounded-full bg-amber-500/10 blur-3xl" />
@@ -33,110 +159,128 @@ export default function SignInPage() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
         className="relative z-10 w-full max-w-md"
       >
         {/* Logo */}
-        <div className="mb-8 text-center">
+        <div className="mb-6 text-center">
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-            className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500"
+            transition={{ delay: 0.2, type: "spring" }}
+            className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500"
           >
-            <Hotel className="h-10 w-10 text-white" />
+            <Hotel className="h-8 w-8 text-white" />
           </motion.div>
-          <h1 className="font-serif text-3xl font-bold text-white">
-            Gani Hostel & Restaurant
+          <h1 className="font-serif text-3xl font-bold text-white tracking-tight">
+            Gani Hotel & Restaurant
           </h1>
-          <p className="mt-2 text-gray-400">
-            Sign in to manage your bookings
-          </p>
+          <p className="mt-2 text-sm text-gray-400">Sign in to manage your bookings</p>
         </div>
 
-        <Card className="border-gray-800 bg-gray-900/50 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="text-center text-xl text-white">
-              Welcome Back
-            </CardTitle>
-            <CardDescription className="text-center text-gray-400">
-              Sign in to access your account
+        {/* Sign In Card */}
+        <Card className="border-gray-800 bg-gray-900/50 backdrop-blur-sm shadow-xl">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-center text-xl text-white">Welcome Back</CardTitle>
+            <CardDescription className="text-center text-gray-400 text-xs">
+              Access your dashboard via Google or Email credentials.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button
-              onClick={handleGoogleSignIn}
-              disabled={loading}
-              className="w-full bg-white text-gray-900 hover:bg-gray-100"
-              size="lg"
-            >
+            {/* Error Messages */}
+            {error && (
+              <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 p-3 text-sm text-rose-400 border border-rose-500/20">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {searchParams.get('error') && (
+              <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 p-3 text-sm text-rose-400 border border-rose-500/20">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>Authentication failed: {searchParams.get('error')}</span>
+              </div>
+            )}
+
+            {infoMessage && (
+              <div className="flex items-center gap-2 rounded-lg bg-orange-500/10 p-3 text-sm text-orange-400 border border-orange-500/20">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{infoMessage}</span>
+              </div>
+            )}
+
+            {/* Google Sign In Button */}
+            <div className="flex justify-center min-h-[48px] pt-1">
               {loading ? (
-                <div className="flex items-center gap-2">
-                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-900 border-t-transparent" />
-                  Signing in...
-                </div>
+                <Button disabled className="w-full" size="lg">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Verifying with Google...
+                </Button>
               ) : (
-                <div className="flex items-center gap-3">
-                  <svg className="h-5 w-5" viewBox="0 0 24 24">
-                    <path
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
-                      fill="#4285F4"
-                    />
-                    <path
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      fill="#34A853"
-                    />
-                    <path
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                      fill="#FBBC05"
-                    />
-                    <path
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                      fill="#EA4335"
-                    />
-                  </svg>
-                  Continue with Google
-                </div>
+                <div
+                  id="googleSignInButton"
+                  className="flex justify-center w-full"
+                />
               )}
-            </Button>
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-700" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-gray-900 px-2 text-gray-400">
-                  Secure Authentication
-                </span>
-              </div>
             </div>
 
-            <div className="rounded-lg bg-gray-800/50 p-4">
-              <div className="flex items-start gap-3">
-                <Utensils className="mt-0.5 h-5 w-5 text-orange-500" />
-                <div>
-                  <p className="text-sm font-medium text-white">
-                    Exclusive Benefits
-                  </p>
-                  <ul className="mt-2 space-y-1 text-sm text-gray-400">
-                    <li>• Manage your bookings</li>
-                    <li>• Chat directly with manager</li>
-                    <li>• Exclusive offers for members</li>
-                  </ul>
-                </div>
-              </div>
+            {/* Divider */}
+            <div className="relative flex py-2 items-center">
+              <div className="flex-grow border-t border-gray-800"></div>
+              <span className="flex-shrink mx-4 text-gray-500 text-xs font-semibold uppercase tracking-wider">OR</span>
+              <div className="flex-grow border-t border-gray-800"></div>
             </div>
 
-            <p className="text-center text-xs text-gray-500">
-              By continuing, you agree to our Terms of Service and Privacy Policy
-            </p>
+            {/* Email Form */}
+            <form onSubmit={handleEmailSignIn} className="space-y-4 text-left">
+              <div className="space-y-1.5">
+                <Label htmlFor="email" className="text-xs font-semibold text-gray-400">Email Address</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="name@example.com"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="border-gray-850 bg-gray-950/40 text-white placeholder-gray-600 focus:border-orange-500/50 focus:ring-orange-500/10 transition-colors"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="password" className="text-xs font-semibold text-gray-400">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="border-gray-850 bg-gray-950/40 text-white placeholder-gray-600 focus:border-orange-500/50 focus:ring-orange-500/10 transition-colors"
+                />
+              </div>
+              <Button type="submit" disabled={emailLoading || loading} className="w-full bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold shadow-lg hover:from-orange-600 hover:to-amber-600 hover:shadow-orange-500/20 transition-all duration-300 mt-2">
+                {emailLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  "Sign In with Email"
+                )}
+              </Button>
+            </form>
+
+            <div className="text-center text-xs text-gray-455 pt-2">
+              Don't have an account?{" "}
+              <Link href={`/auth/signup?redirect=${encodeURIComponent(redirectUrl)}`} className="text-orange-500 font-semibold hover:underline">
+                Create an account
+              </Link>
+            </div>
           </CardContent>
         </Card>
 
+        {/* Back Link */}
         <p className="mt-6 text-center text-sm text-gray-500">
-          Need help?{" "}
-          <Link href="/" className="text-orange-500 hover:text-orange-400">
-            Contact us via WhatsApp
+          <Link href="/" className="text-orange-500 hover:text-orange-400 font-medium transition-colors">
+            ← Back to Home
           </Link>
         </p>
       </motion.div>

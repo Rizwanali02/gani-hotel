@@ -1,178 +1,192 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import dbConnect from '@/lib/mongodb'
 import { revalidatePath } from 'next/cache'
-import { z } from 'zod'
-
-const guestSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
-  phone: z.string().min(10, 'Phone must be at least 10 digits'),
-  email: z.string().email().optional().or(z.literal('')),
-  roomNo: z.string().min(1, 'Room number is required'),
-  roomType: z.enum(['DORMITORY', 'PRIVATE', 'DELUXE', 'SUITE']),
-  checkIn: z.string().min(1, 'Check-in date is required'),
-  amountPaid: z.number().min(0),
-  totalAmount: z.number().min(0),
-  paymentStatus: z.enum(['PAID', 'PENDING', 'PARTIAL']),
-  notes: z.string().optional(),
-})
+import { writeFile } from 'fs/promises'
+import path from 'path'
+import { getCurrentUser } from './auth'
+import { GuestRecord } from '../models/GuestRecord'
+import { Revenue } from '../models/Reveune'
 
 export async function createGuestRecord(formData: FormData) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
   
-  if (!user) {
+  if (!user || user.role !== 'ADMIN') {
     throw new Error('Unauthorized')
   }
 
-  const validatedFields = guestSchema.safeParse({
-    name: formData.get('name'),
-    phone: formData.get('phone'),
-    email: formData.get('email'),
-    roomNo: formData.get('roomNo'),
-    roomType: formData.get('roomType'),
-    checkIn: formData.get('checkIn'),
-    amountPaid: Number(formData.get('amountPaid')),
-    totalAmount: Number(formData.get('totalAmount')),
-    paymentStatus: formData.get('paymentStatus'),
-    notes: formData.get('notes'),
-  })
+  await dbConnect()
 
-  if (!validatedFields.success) {
-    console.error('Validation errors:', validatedFields.error.flatten())
-    return { error: 'Invalid fields', details: validatedFields.error.flatten() }
-  }
-
-  const { name, phone, email, roomNo, roomType, checkIn, amountPaid, totalAmount, paymentStatus, notes } = validatedFields.data
+  const name = formData.get('name') as string
+  const phone = formData.get('phone') as string
+  const email = formData.get('email') as string
+  const roomNo = formData.get('roomNo') as string
+  const roomType = formData.get('roomType') as string
+  const checkIn = new Date(formData.get('checkIn') as string)
+  const amountPaid = parseFloat(formData.get('amountPaid') as string) || 0
+  const totalAmount = parseFloat(formData.get('totalAmount') as string) || 0
+  const paymentStatus = formData.get('paymentStatus') as string
+  const notes = formData.get('notes') as string
 
   // Handle ID card upload
   const idCardFile = formData.get('idCard') as File
-  let idCardUrl = null
+  let idCardUrl = ''
 
   if (idCardFile && idCardFile.size > 0) {
-    const fileName = `id-cards/${user.id}/${Date.now()}-${idCardFile.name}`
-    const { data, error } = await supabase.storage
-      .from('documents')
-      .upload(fileName, idCardFile)
-
-    if (error) {
-      console.error('File upload error:', error)
-      throw error
-    }
+    const bytes = await idCardFile.arrayBuffer()
+    const buffer = Buffer.from(bytes)
     
-    const { data: { publicUrl } } = supabase.storage
-      .from('documents')
-      .getPublicUrl(fileName)
+    const fileName = `id-card-${Date.now()}-${idCardFile.name}`
+    const filePath = path.join(process.cwd(), 'public/uploads', fileName)
     
-    idCardUrl = publicUrl
+    await writeFile(filePath, buffer)
+    idCardUrl = `/uploads/${fileName}`
   }
 
-  const { data: guest, error } = await supabase
-    .from('GuestRecord')
-    .insert({
-      name,
-      phone,
-      email: email || null,
-      roomNo,
-      roomType,
-      checkIn: new Date(checkIn).toISOString(),
-      amountPaid,
-      totalAmount,
-      paymentStatus,
-      notes: notes || null,
-      idCardUrl,
-      userId: user.id,
-      createdBy: user.email!,
-      status: 'ACTIVE',
-    })
-    .select()
-    .single()
-
-  if (error) {
-    console.error('Database error:', error)
-    throw error
-  }
+  const guest = await GuestRecord.create({
+    name,
+    phone,
+    email: email || undefined,
+    roomNo,
+    roomType,
+    checkIn,
+    amountPaid,
+    totalAmount,
+    paymentStatus,
+    notes: notes || undefined,
+    idCardUrl,
+    userId: user._id,
+    createdBy: user.email,
+  })
 
   // Create revenue record if payment made
   if (amountPaid > 0) {
-    await supabase
-      .from('Revenue')
-      .insert({
-        amount: amountPaid,
-        description: `Payment from ${name} - Room ${roomNo}`,
-        category: 'ROOM_BOOKING',
-        guestId: guest.id,
-      })
+    await Revenue.create({
+      amount: amountPaid,
+      description: `Payment from ${name} - Room ${roomNo}`,
+      category: 'ROOM_BOOKING',
+      guestId: guest._id,
+    })
   }
 
   revalidatePath('/admin/guests')
-  return { success: true, guest }
+  return { success: true, guest: JSON.parse(JSON.stringify(guest)) }
 }
 
 export async function getGuests() {
-  const supabase = await createClient()
+  const user = await getCurrentUser()
   
-  const { data: guests, error } = await supabase
-    .from('GuestRecord')
-    .select('*')
-    .eq('status', 'ACTIVE')
-    .order('checkIn', { ascending: false })
-
-  if (error) {
-    console.error('Error fetching guests:', error)
-    throw error
+  if (!user || user.role !== 'ADMIN') {
+    throw new Error('Unauthorized')
   }
-  
-  return guests
+
+  await dbConnect()
+
+  const guests = await GuestRecord.find({ status: 'ACTIVE' })
+    .sort({ checkIn: -1 })
+    .lean()
+
+  return JSON.parse(JSON.stringify(guests))
 }
 
-export async function checkOutGuest(guestId: string) {
-  const supabase = await createClient()
+export async function checkOutGuest(guestId: string, settlementAmount?: number) {
+  const user = await getCurrentUser()
   
-  const { error } = await supabase
-    .from('GuestRecord')
-    .update({
-      status: 'CHECKED_OUT',
-      checkOut: new Date().toISOString(),
-    })
-    .eq('id', guestId)
-
-  if (error) {
-    console.error('Error checking out guest:', error)
-    throw error
+  if (!user || user.role !== 'ADMIN') {
+    throw new Error('Unauthorized')
   }
-  
+
+  await dbConnect()
+
+  const guest = await GuestRecord.findById(guestId)
+  if (!guest) {
+    throw new Error('Guest record not found')
+  }
+
+  if (guest.status === 'CHECKED_OUT') {
+    throw new Error('Guest is already checked out')
+  }
+
+  const outstanding = guest.totalAmount - guest.amountPaid
+
+  // If there's an outstanding balance, a settlement is required
+  if (outstanding > 0) {
+    if (settlementAmount === undefined || settlementAmount === null) {
+      // Return payment info so the frontend can show the settlement modal
+      return {
+        success: false,
+        requiresSettlement: true,
+        outstanding,
+        amountPaid: guest.amountPaid,
+        totalAmount: guest.totalAmount,
+        guestName: guest.name,
+      }
+    }
+
+    if (settlementAmount < outstanding) {
+      throw new Error(`Settlement amount (₹${settlementAmount}) is less than outstanding balance (₹${outstanding}). Full payment is required.`)
+    }
+
+    // Record the settlement payment
+    const actualSettlement = Math.min(settlementAmount, outstanding)
+    guest.amountPaid = guest.amountPaid + actualSettlement
+    guest.paymentStatus = 'PAID'
+
+    // Create revenue record for the settlement
+    await Revenue.create({
+      amount: actualSettlement,
+      description: `Checkout settlement from ${guest.name} - Room ${guest.roomNo}`,
+      category: 'ROOM_BOOKING',
+      guestId: guest._id,
+    })
+  }
+
+  // Mark as checked out
+  guest.status = 'CHECKED_OUT'
+  guest.checkOut = new Date()
+  // Ensure paymentStatus is PAID for fully paid guests on checkout
+  if (guest.amountPaid >= guest.totalAmount) {
+    guest.paymentStatus = 'PAID'
+  }
+  await guest.save()
+
   revalidatePath('/admin/guests')
+  revalidatePath('/admin')
   return { success: true }
 }
 
 export async function getRevenueStats() {
-  const supabase = await createClient()
+  const user = await getCurrentUser()
   
+  if (!user || user.role !== 'ADMIN') {
+    throw new Error('Unauthorized')
+  }
+
+  await dbConnect()
+
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  
-  const { data: todayRevenue, error } = await supabase
-    .from('Revenue')
-    .select('amount')
-    .gte('date', today.toISOString())
 
-  if (error) throw error
-  
-  const totalToday = todayRevenue?.reduce((sum, record) => sum + record.amount, 0) || 0
-  
-  const { data: pendingPayments, error: pendingError } = await supabase
-    .from('GuestRecord')
-    .select('totalAmount, amountPaid')
-    .eq('status', 'ACTIVE')
-    .in('paymentStatus', ['PENDING', 'PARTIAL'])
+  const todayRevenue = await Revenue.aggregate([
+    { $match: { date: { $gte: today } } },
+    { $group: { _id: null, total: { $sum: '$amount' } } },
+  ])
 
-  if (pendingError) throw pendingError
-  
-  const totalPending = pendingPayments?.reduce(
-    (sum, record) => sum + (record.totalAmount - record.amountPaid), 
+  const pendingGuests = await GuestRecord.find({
+    status: 'ACTIVE',
+    paymentStatus: { $in: ['PENDING', 'PARTIAL'] },
+  })
+
+  const totalPending = pendingGuests.reduce(
+    (sum:any, guest:any) => sum + (guest.totalAmount - guest.amountPaid),
     0
-  ) || 0
-  
-  return { totalToday, totalPending }
+  )
+
+  const totalAllTime = await GuestRecord.countDocuments({})
+
+  return {
+    totalToday: todayRevenue[0]?.total || 0,
+    totalPending,
+    totalAllTime,
+  }
 }
