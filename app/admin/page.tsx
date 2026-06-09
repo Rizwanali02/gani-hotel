@@ -5,6 +5,8 @@ import { Users, IndianRupee, TrendingUp, AlertCircle, UserPlus, ArrowRight, Clip
 import Link from "next/link"
 import { formatCurrency } from "@/lib/utils"
 
+export const dynamic = 'force-dynamic'
+
 export default async function AdminDashboard() {
   const guests = await getGuests()
   const { totalToday, totalPending, totalAllTime } = await getRevenueStats()

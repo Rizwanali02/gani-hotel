@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
@@ -17,7 +17,7 @@ declare global {
   }
 }
 
-export default function SignInPage() {
+function SignInContent() {
   const [loading, setLoading] = useState(false)
   const [emailLoading, setEmailLoading] = useState(false)
   const [email, setEmail] = useState("")
@@ -285,5 +285,17 @@ export default function SignInPage() {
         </p>
       </motion.div>
     </div>
+  )
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-gray-950">
+        <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
+      </div>
+    }>
+      <SignInContent />
+    </Suspense>
   )
 }

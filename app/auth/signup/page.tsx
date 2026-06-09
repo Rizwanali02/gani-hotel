@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
@@ -11,7 +11,7 @@ import { Hotel, Loader2, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/app/context/AuthContext"
 
-export default function SignUpPage() {
+function SignUpContent() {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -211,5 +211,17 @@ export default function SignUpPage() {
         </p>
       </motion.div>
     </div>
+  )
+}
+
+export default function SignUpPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-gray-950">
+        <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
+      </div>
+    }>
+      <SignUpContent />
+    </Suspense>
   )
 }

@@ -14,6 +14,8 @@ import Link from "next/link"
 import { UserPlus, Users, ArrowLeft, Calendar } from "lucide-react"
 import { CheckOutButton } from "@/app/components/CheckOutButton"
 
+export const dynamic = 'force-dynamic'
+
 export default async function GuestLedgerPage() {
   const guests = await getGuests()
 
