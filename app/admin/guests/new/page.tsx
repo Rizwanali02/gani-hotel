@@ -133,6 +133,23 @@ export default function NewGuestPage() {
               </div>
             </div>
 
+            {/* Section 4: Notes */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 border-b border-gray-800 pb-2">
+                <CreditCard className="h-4 w-4 text-orange-500" />
+                <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Additional Notes</h3>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-gray-400">Notes / Special Requests</Label>
+                <textarea
+                  name="notes"
+                  rows={3}
+                  placeholder="Any special requests, remarks, or observations..."
+                  className="w-full rounded-md border border-gray-800 bg-gray-950/50 px-3 py-2 text-sm text-white placeholder-gray-600 focus:border-orange-500/50 focus:outline-none focus:ring-1 focus:ring-orange-500/10 transition-colors resize-none"
+                />
+              </div>
+            </div>
+
             {/* Action Buttons */}
             <div className="pt-4 border-t border-gray-800/60 flex items-center gap-4">
               <Link href="/admin/guests" className="w-1/3">

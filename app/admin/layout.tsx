@@ -3,7 +3,7 @@
 import { ReactNode } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Users, UserPlus, Shield } from "lucide-react"
+import { LayoutDashboard, Users, UserPlus, Shield, History } from "lucide-react"
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname()
@@ -12,6 +12,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
     { href: "/admin/guests", label: "Guest Ledger", icon: Users },
     { href: "/admin/guests/new", label: "Check-in Guest", icon: UserPlus },
+    { href: "/admin/guests/history", label: "All Guests", icon: History },
   ]
 
   return (

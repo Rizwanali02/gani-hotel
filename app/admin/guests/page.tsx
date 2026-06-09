@@ -11,8 +11,9 @@ import {
 } from "@/components/ui/table"
 import { formatCurrency } from "@/lib/utils"
 import Link from "next/link"
-import { UserPlus, Users, ArrowLeft, Calendar } from "lucide-react"
+import { UserPlus, Users, ArrowLeft, Calendar, FileText } from "lucide-react"
 import { CheckOutButton } from "@/app/components/CheckOutButton"
+import { AddNoteButton } from "@/app/components/AddNoteButton"
 
 export const dynamic = 'force-dynamic'
 
@@ -74,7 +75,7 @@ export default async function GuestLedgerPage() {
                     <TableHead className="text-gray-300 font-semibold py-4">Check-in Details</TableHead>
                     <TableHead className="text-gray-300 font-semibold py-4">Financials</TableHead>
                     <TableHead className="text-gray-300 font-semibold py-4">Status</TableHead>
-                    <TableHead className="text-right text-gray-300 font-semibold py-4 pr-6">Action</TableHead>
+                    <TableHead className="text-right text-gray-300 font-semibold py-4 pr-6">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -128,26 +129,41 @@ export default async function GuestLedgerPage() {
                         </div>
                       </TableCell>
                       <TableCell className="py-4">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-bold tracking-wider uppercase ${
-                            guest.paymentStatus === 'PAID'
-                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                              : guest.paymentStatus === 'PARTIAL'
-                              ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
-                              : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                          }`}
-                        >
-                          {guest.paymentStatus}
-                        </span>
+                        <div className="flex flex-col gap-1.5 items-start">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-bold tracking-wider uppercase ${
+                              guest.paymentStatus === 'PAID'
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                : guest.paymentStatus === 'PARTIAL'
+                                ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
+                                : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                            }`}
+                          >
+                            {guest.paymentStatus}
+                          </span>
+                          {guest.notes && (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-sky-400/70">
+                              <FileText className="h-3 w-3" />
+                              Has note
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="py-4 text-right pr-6">
-                        <CheckOutButton
-                          guestId={guest._id}
-                          paymentStatus={guest.paymentStatus}
-                          amountPaid={guest.amountPaid}
-                          totalAmount={guest.totalAmount}
-                          guestName={guest.name}
-                        />
+                        <div className="flex items-center justify-end gap-2">
+                          <AddNoteButton
+                            guestId={guest._id}
+                            guestName={guest.name}
+                            existingNotes={guest.notes || ""}
+                          />
+                          <CheckOutButton
+                            guestId={guest._id}
+                            paymentStatus={guest.paymentStatus}
+                            amountPaid={guest.amountPaid}
+                            totalAmount={guest.totalAmount}
+                            guestName={guest.name}
+                          />
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

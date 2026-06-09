@@ -190,3 +190,41 @@ export async function getRevenueStats() {
     totalAllTime,
   }
 }
+
+export async function getAllGuests() {
+  const user = await getCurrentUser()
+  
+  if (!user || user.role !== 'ADMIN') {
+    throw new Error('Unauthorized')
+  }
+
+  await dbConnect()
+
+  const guests = await GuestRecord.find({})
+    .sort({ checkIn: -1 })
+    .lean()
+
+  return JSON.parse(JSON.stringify(guests))
+}
+
+export async function updateGuestNotes(guestId: string, notes: string) {
+  const user = await getCurrentUser()
+  
+  if (!user || user.role !== 'ADMIN') {
+    throw new Error('Unauthorized')
+  }
+
+  await dbConnect()
+
+  const guest = await GuestRecord.findById(guestId)
+  if (!guest) {
+    throw new Error('Guest record not found')
+  }
+
+  guest.notes = notes.trim()
+  await guest.save()
+
+  revalidatePath('/admin/guests')
+  revalidatePath('/admin/guests/history')
+  return { success: true }
+}

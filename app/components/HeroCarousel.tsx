@@ -103,10 +103,10 @@ export function HeroCarousel() {
               src={slide.image}
               alt={slide.title}
               className="h-full w-full object-cover object-center"
-              draggable={false}
+              draggable={true}
             />
             {/* Gradient overlay — stronger on mobile for text legibility */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-black/30 md:bg-black/60" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/0 to-black/20 md:bg-black/50" />
           </div>
 
           {/* Main Content Area */}
@@ -214,11 +214,10 @@ export function HeroCarousel() {
             key={index}
             onClick={() => setCurrent(index)}
             aria-label={`Go to slide ${index + 1}`}
-            className={`h-1.5 sm:h-2 transition-all duration-500 rounded-full touch-manipulation ${
-              index === current
-                ? "w-10 sm:w-12 bg-orange-600"
-                : "w-4 sm:w-4 bg-white/30 hover:bg-white/50"
-            }`}
+            className={`h-1.5 sm:h-2 transition-all duration-500 rounded-full touch-manipulation ${index === current
+              ? "w-10 sm:w-12 bg-orange-600"
+              : "w-4 sm:w-4 bg-white/30 hover:bg-white/50"
+              }`}
           />
         ))}
       </div>
